@@ -1,0 +1,15 @@
+.git
+.gitignore
+node_modules
+npm-debug.log
+coverage
+dist
+.DS_Store
+
+# Local env files should not be baked into images.
+.env
+.env.*
+
+README.md
+test
+*.md
