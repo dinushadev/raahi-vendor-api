@@ -1,0 +1,75 @@
+on:
+  workflow_dispatch:
+    inputs:
+      reference:
+        description: "Branch or tag to build"
+        required: true
+        default: "devops"
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ROLE_ARN: arn:aws:iam::727646489870:role/IAM-ROLE-NV-NONPROD-VENDORAPI-RAAHI-1
+  ECR_REPOSITORY: ecr-nv-nonprod-raahi-1
+
+jobs:
+  docker-build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-24.04
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout selected branch or tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.reference }}
+
+      - name: Set Docker image tag
+        run: |
+          REF_NAME="${{ github.event.inputs.reference }}"
+          SAFE_TAG=$(echo "$REF_NAME" | sed 's#/#-#g')
+          echo "IMAGE_TAG=$SAFE_TAG" >> $GITHUB_ENV
+
+      - name: Show selected configuration
+        run: |
+          echo "AWS region: $AWS_REGION"
+          echo "ECR repository: $ECR_REPOSITORY"
+          echo "Image tag: $IMAGE_TAG"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+
+      - name: Verify AWS OIDC login
+        run: |
+          echo "Checking AWS identity..."
+          aws sts get-caller-identity
+          echo "AWS OIDC login successful"
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker build \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            .
+
+      - name: Push Docker image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
