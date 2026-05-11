@@ -21,7 +21,12 @@ import { SchemaModule } from './modules/schema/schema.module';
         type: 'postgres',
 
         //  connection string
-        url: config.get<string>('DATABASE_URL'),
+        // url: config.get<string>('DATABASE_URL'),
+        host: config.get<string>('DB_HOST'),
+        port: Number(config.get<string>('DB_PORT') || 5432),
+        username: config.get<string>('DB_USERNAME'),
+        password: config.get<string>('DB_PASSWORD'),
+        database: config.get<string>('DB_NAME'),
 
         // Auto load entities (from feature modules)
         autoLoadEntities: true,
@@ -30,9 +35,9 @@ import { SchemaModule } from './modules/schema/schema.module';
         synchronize: false,
 
         // Required for Neon (SSL)
-        ssl: {
-          rejectUnauthorized: false,
-        },
+        ssl: config.get<string>('DB_SSL') === 'true'
+          ? { rejectUnauthorized: false }
+          : false,
 
         // Serverless-safe pooling
         extra: {

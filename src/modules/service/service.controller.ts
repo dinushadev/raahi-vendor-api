@@ -6,6 +6,11 @@ import { ServicesByLocationResponse } from './dtos/services-by-location.dto';
 export class ServiceConfigController {
   constructor(private readonly serviceConfigService: ServiceConfigService) {}
 
+  @Get('ok')
+  ok() {
+    return { status: 'ok' };
+  }
+
   @Get('by-location/:locationId')
   async getServicesByLocation(
     @Param('locationId') locationId: string,
