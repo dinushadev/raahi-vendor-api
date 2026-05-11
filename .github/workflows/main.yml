@@ -3,17 +3,11 @@ on:
     branches:
       - devops
 
-  workflow_dispatch:
-    inputs:
-      reference:
-        description: "Branch or tag to build"
-        required: true
-        default: "devops"
-
 env:
   AWS_REGION: us-east-1
   AWS_ROLE_ARN: arn:aws:iam::727646489870:role/IAM-ROLE-NV-NONPROD-VENDORAPI-RAAHI-1
   ECR_REPOSITORY: ecr-nv-nonprod-raahi-1
+  IMAGE_TAG: v1.0.0
 
 jobs:
   docker-build-and-push:
