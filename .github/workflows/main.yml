@@ -24,12 +24,6 @@ jobs:
         with:
           ref: ${{ github.event.inputs.reference }}
 
-      - name: Set Docker image tag
-        run: |
-          REF_NAME="${{ github.event.inputs.reference }}"
-          SAFE_TAG=$(echo "$REF_NAME" | sed 's#/#-#g')
-          echo "IMAGE_TAG=$SAFE_TAG" >> $GITHUB_ENV
-
       - name: Show selected configuration
         run: |
           echo "AWS region: $AWS_REGION"
