@@ -38,7 +38,7 @@ jobs:
 
       - name: Verify AWS OIDC login
         run: |
-          echo "Checking AWS identity..."
+          echo "Checking AWS identity"
           aws sts get-caller-identity
           echo "AWS OIDC login successful"
 
