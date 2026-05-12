@@ -2,14 +2,14 @@ import { Entity, PrimaryColumn, Column } from 'typeorm';
 
 @Entity('location_service')
 export class LocationService {
-  @PrimaryColumn('uuid')
-  id: string;
+  @PrimaryColumn({ name: 'service_location_key', type: 'varchar' })
+  service_location_key: string;
 
-  @Column({ name: 'location_id', type: 'uuid' })
-  locationId: string;
+  @Column({ name: 'location_code', type: 'varchar' })
+  location_code: string;
 
-  @Column({ name: 'service_id', type: 'uuid' })
-  serviceId: string;
+  @Column({ name: 'service_key', type: 'varchar' })
+  service_key: string;
 
   @Column({ name: 'onboarding_schema_id', type: 'uuid', nullable: true })
   onboardingSchemaId: string;

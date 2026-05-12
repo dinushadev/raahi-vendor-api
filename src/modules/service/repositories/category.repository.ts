@@ -10,15 +10,15 @@ export class CategoryRepository {
     private readonly repository: Repository<Category>,
   ) {}
 
-  async findByIds(ids: string[]): Promise<Category[]> {
+  async findByKeys(keys: string[]): Promise<Category[]> {
     return this.repository.find({
-      where: { id: In(ids), isActive: true },
+      where: { category_key: In(keys), isActive: true },
     });
   }
 
-  async findById(id: string): Promise<Category | null> {
+  async findByKey(key: string): Promise<Category | null> {
     return this.repository.findOne({
-      where: { id, isActive: true },
+      where: { category_key: key, isActive: true },
     });
   }
 }

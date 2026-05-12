@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
-//import { CreateServiceConfigDto } from './dtos/create-service-config.dto';
 import { CreateServiceConfigByIdDto } from './dtos/create-service-config-by-id.dto';
 import { ServiceOnboardingSchema, SchemaStatus, ServiceSpecialField, AssetType } from './entities';
 import { Service } from '../service/entities/service.entity';
+import { LocationService } from '../service/entities/location-service.entity';
+import { ResourceNotFoundException, BadRequestException } from '../../common/exceptions/custom.exception';
 
 @Injectable()
 export class SchemaService {
@@ -18,6 +19,8 @@ export class SchemaService {
     private specialFieldRepo: Repository<ServiceSpecialField>,
     @InjectRepository(AssetType)
     private assetTypeRepo: Repository<AssetType>,
+    @InjectRepository(LocationService)
+    private locationServiceRepo: Repository<LocationService>,
   ) {}
 
 
@@ -26,13 +29,13 @@ export class SchemaService {
     const { service_key, meta, special_elements = [], asset_types = [] } = dto;
     // Verify service exists by service_key
     const service = await this.serviceRepo.findOne({
-      where: { serviceKey: service_key }
+      where: { service_key: service_key }
     });
     if (!service) {
-      throw new NotFoundException(`Service with key '${service_key}' not found`);
+      throw new ResourceNotFoundException(`Service with key '${service_key}' not found`);
     }
     // Auto-generate schema_key
-    const schemaKey = `${service.serviceKey}_v${meta.schema_version}`;
+    const schemaKey = `${service.service_key}_v${meta.schema_version}`;
 
     // Transaction to insert all records
     const queryRunner = this.dataSource.createQueryRunner();
@@ -42,7 +45,7 @@ export class SchemaService {
     try {
       // Create Schema
       const schema = queryRunner.manager.create(ServiceOnboardingSchema, {
-        serviceId: service.id,
+        serviceId: service.service_key,
         schemaKey: schemaKey,
         schemaVersion: meta.schema_version,
         maxAssetsAllowed: meta.rules.max_assets_allowed,
@@ -84,88 +87,110 @@ export class SchemaService {
 
       return {
         schema_id: savedSchema.id,
-        service_id: service.id,
+        service_key: service.service_key,
         schema_key: schemaKey,
         status: savedSchema.status,
         created_at: savedSchema.createdAt,
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      throw error;
+      if (error instanceof BadRequestException || error instanceof ResourceNotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Failed to create service config',
+      );
     } finally {
       await queryRunner.release();
     }
   }
 
-  async getServiceConfigByKey(service_key: string) {
-    // Verify service exists by service_key
+  async getServiceConfigByLocationServiceId(serviceLocationKey: string) {
+    // Find LocationService by id
+    const locationService = await this.locationServiceRepo.findOne({
+      where: { service_location_key: serviceLocationKey}
+    });
+
+    if (!locationService) {
+      throw new ResourceNotFoundException(
+        `LocationService with id '${serviceLocationKey}' not found`,
+      );
+    }
+
+    // Check if onboarding_schema_id exists
+    if (!locationService.onboardingSchemaId) {
+      throw new ResourceNotFoundException(
+        `No onboarding schema assigned to this location service`,
+      );
+    }
+
+    // Fetch the schema
+    const schema = await this.schemaRepo.findOne({
+      where: { 
+        id: locationService.onboardingSchemaId,
+        isActive: true 
+      }
+    });
+
+    if (!schema) {
+      throw new ResourceNotFoundException(
+        `Schema with id '${locationService.onboardingSchemaId}' not found`,
+      );
+    }
+
+    // Check if schema status is PUBLISHED
+    if (schema.status !== SchemaStatus.PUBLISHED) {
+      throw new BadRequestException(
+        `Schema is not published. Current status: ${schema.status}`,
+      );
+    }
+
+    // Fetch service to get service_type
     const service = await this.serviceRepo.findOne({
-      where: { serviceKey: service_key }
+      where: { service_key: schema.serviceId }
     });
+
     if (!service) {
-      throw new NotFoundException(`Service with key '${service_key}' not found`);
+      throw new ResourceNotFoundException(`Service not found for schema`);
     }
 
-    // Fetch all schemas for this service
-    const schemas = await this.schemaRepo.find({
-      where: { serviceId: service.id, isActive: true },
-      order: { createdAt: 'DESC' }
+    // Fetch special fields and asset types
+    const specialFields = await this.specialFieldRepo.find({
+      where: { schemaId: schema.id, isActive: true }
     });
 
-    if (schemas.length === 0) {
-      return {
-        service_key,
-        service_id: service.id,
-        schemas: []
-      };
-    }
+    const assetTypes = await this.assetTypeRepo.find({
+      where: { schemaId: schema.id, isActive: true }
+    });
 
-    // Fetch special fields and asset types for each schema
-    const schemasWithDetails = await Promise.all(
-      schemas.map(async (schema) => {
-        const specialFields = await this.specialFieldRepo.find({
-          where: { schemaId: schema.id, isActive: true }
-        });
+    // Format special elements
+    const special_elements = specialFields.map((field) => ({
+      entity_type: field.entityType,
+      entity_id: field.entityId,
+      title: field.title,
+      description: field.description,
+      fields: field.fieldsJson,
+    }));
 
-        const assetTypes = await this.assetTypeRepo.find({
-          where: { schemaId: schema.id, isActive: true }
-        });
+    // Format asset types
+    const asset_types_formatted = assetTypes.map((asset) => ({
+      asset_type_id: asset.assetTypeId,
+      label: asset.label,
+      description: asset.description,
+      fields: asset.assetFieldsJson,
+    }));
 
-        // Format special elements
-        const special_elements = specialFields.map((field) => ({
-          entity_type: field.entityType,
-          entity_id: field.entityId,
-          title: field.title,
-          description: field.description,
-          fields: field.fieldsJson,
-        }));
-
-        // Format asset types
-        const asset_types_formatted = assetTypes.map((asset) => ({
-          asset_type_id: asset.assetTypeId,
-          label: asset.label,
-          description: asset.description,
-          fields: asset.assetFieldsJson,
-        }));
-
-        return {
-          schema_id: schema.id,
-          schema_key: schema.schemaKey,
-          schema_version: schema.schemaVersion,
-          max_assets_allowed: schema.maxAssetsAllowed,
-          status: schema.status,
-          special_elements,
-          asset_types: asset_types_formatted,
-          created_at: schema.createdAt,
-          updated_at: schema.updatedAt,
-        };
-      })
-    );
-
+    // Return in the specified format
     return {
-      service_key,
-      service_id: service.id,
-      schemas: schemasWithDetails
+      meta: {
+        service_type: service.name, // Using service name as service_type, adjust if needed
+        schema_version: schema.schemaVersion,
+        rules: {
+          max_assets_allowed: schema.maxAssetsAllowed
+        }
+      },
+      special_elements,
+      asset_types: asset_types_formatted
     };
   }
 }
